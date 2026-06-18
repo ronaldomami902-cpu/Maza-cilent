@@ -11,7 +11,7 @@ import net.minecraft.client.util.math.MatrixStack;
 import net.minecraft.util.math.*;
 import org.joml.Matrix4f;
 import java.util.*;
-import java.util.concurrent.*;
+import java.util.concurrent.CopyOnWriteArrayList;
 
 public class EspRenderer {
     private static final List<BlockPos> foundBlocks = new CopyOnWriteArrayList<>();
@@ -41,25 +41,59 @@ public class EspRenderer {
         Vec3d camPos = context.camera().getPos();
         matrices.push();
         matrices.translate(-camPos.x, -camPos.y, -camPos.z);
+
         RenderSystem.enableBlend();
         RenderSystem.defaultBlendFunc();
         RenderSystem.disableDepthTest();
         RenderSystem.lineWidth(2.5f);
 
         Tessellator tess = Tessellator.getInstance();
-        BufferBuilder buf = tess.begin(VertexFormat.DrawMode.LINES, VertexFormats.LINES);
 
+        // ESP Outline
+        BufferBuilder buf = tess.begin(VertexFormat.DrawMode.LINES, VertexFormats.LINES);
         for (BlockPos pos : foundBlocks) {
+            if (!mc.world.isChunkLoaded(pos.getX() >> 4, pos.getZ() >> 4)) continue;
             float[] color = getColor(mc.world.getBlockState(pos).getBlock(), cfg);
             if (color != null) drawBox(matrices, buf, pos, color);
         }
         if (cfg.chunkVoidEnabled) {
             for (long[] chunk : voidChunks) {
-                drawChunk(matrices, buf, (int)chunk[0]*16, (int)chunk[1]*16, cfg.yMin, cfg.yMax, cfg.chunkVoidColor);
+                drawChunk(matrices, buf, (int)chunk[0]*16, (int)chunk[1]*16,
+                    cfg.yMin, cfg.yMax, cfg.chunkVoidColor);
             }
         }
+        try {
+            BuiltBuffer built = buf.endNullable();
+            if (built != null) BufferRenderer.drawWithGlobalProgram(built);
+        } catch (Exception ignored) {}
 
-        try { BufferRenderer.drawWithGlobalProgram(buf.end()); } catch (Exception ignored) {}
+        // Tracers
+        if (cfg.tracersEnabled) {
+            RenderSystem.lineWidth(1.5f);
+            BufferBuilder tracerBuf = tess.begin(VertexFormat.DrawMode.LINES, VertexFormats.LINES);
+            Vec3d start = new Vec3d(camPos.x, camPos.y, camPos.z);
+            for (BlockPos pos : foundBlocks) {
+                if (!mc.world.isChunkLoaded(pos.getX() >> 4, pos.getZ() >> 4)) continue;
+                float[] color = getColor(mc.world.getBlockState(pos).getBlock(), cfg);
+                if (color == null) continue;
+                float tx = pos.getX() + 0.5f;
+                float ty = pos.getY() + 0.5f;
+                float tz = pos.getZ() + 0.5f;
+                Matrix4f mx = matrices.peek().getPositionMatrix();
+                float dx = tx-(float)start.x, dy = ty-(float)start.y, dz = tz-(float)start.z;
+                float len = (float)Math.sqrt(dx*dx+dy*dy+dz*dz);
+                if (len == 0) continue;
+                tracerBuf.vertex(mx, (float)start.x, (float)start.y, (float)start.z)
+                    .color(color[0], color[1], color[2], 0.5f).normal(dx/len, dy/len, dz/len);
+                tracerBuf.vertex(mx, tx, ty, tz)
+                    .color(color[0], color[1], color[2], 0.5f).normal(dx/len, dy/len, dz/len);
+            }
+            try {
+                BuiltBuffer built = tracerBuf.endNullable();
+                if (built != null) BufferRenderer.drawWithGlobalProgram(built);
+            } catch (Exception ignored) {}
+        }
+
         RenderSystem.enableDepthTest();
         RenderSystem.disableBlend();
         matrices.pop();
@@ -68,7 +102,7 @@ public class EspRenderer {
     private static void scanBlocks(MinecraftClient mc, BlockPos playerPos, MazaConfig cfg) {
         foundBlocks.clear();
         voidChunks.clear();
-        int range = 64;
+        int range = 48;
         for (int x = -range; x <= range; x++) {
             for (int z = -range; z <= range; z++) {
                 for (int y = cfg.yMin; y <= cfg.yMax; y++) {
@@ -81,8 +115,8 @@ public class EspRenderer {
         }
         if (cfg.chunkVoidEnabled) {
             int cx = playerPos.getX()>>4, cz = playerPos.getZ()>>4;
-            for (int dcx = -5; dcx <= 5; dcx++) {
-                for (int dcz = -5; dcz <= 5; dcz++) {
+            for (int dcx = -4; dcx <= 4; dcx++) {
+                for (int dcz = -4; dcz <= 4; dcz++) {
                     int chunkX = cx+dcx, chunkZ = cz+dcz;
                     if (!mc.world.isChunkLoaded(chunkX, chunkZ)) continue;
                     int air = 0;
@@ -103,7 +137,8 @@ public class EspRenderer {
         if (c.pistonEnabled && (b == Blocks.PISTON || b == Blocks.STICKY_PISTON)) return c.pistonColor;
         if (c.glassEnabled && (b == Blocks.GLASS || b == Blocks.GLASS_PANE
             || b instanceof StainedGlassBlock || b instanceof StainedGlassPaneBlock)) return c.glassColor;
-        if (c.chestEnabled && (b == Blocks.CHEST || b == Blocks.TRAPPED_CHEST || b == Blocks.ENDER_CHEST)) return c.chestColor;
+        if (c.chestEnabled && (b == Blocks.CHEST || b == Blocks.TRAPPED_CHEST
+            || b == Blocks.ENDER_CHEST)) return c.chestColor;
         if (c.shulkerEnabled && b instanceof ShulkerBoxBlock) return c.shulkerColor;
         if (c.spawnerEnabled && (b == Blocks.SPAWNER || b == Blocks.TRIAL_SPAWNER)) return c.spawnerColor;
         return null;
@@ -138,4 +173,4 @@ public class EspRenderer {
         b.vertex(m,x1,y1,z1).color(r,g,bl,a).normal(dx/len,dy/len,dz/len);
         b.vertex(m,x2,y2,z2).color(r,g,bl,a).normal(dx/len,dy/len,dz/len);
     }
-    }
+                                    }
