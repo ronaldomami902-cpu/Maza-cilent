@@ -2,6 +2,7 @@ package com.mazaclient.config;
 
 public class MazaConfig {
     public boolean espEnabled = true;
+    public boolean tracersEnabled = true;
     public boolean redstoneEnabled = true;
     public boolean observerEnabled = true;
     public boolean dispenserEnabled = true;
@@ -11,8 +12,8 @@ public class MazaConfig {
     public boolean spawnerEnabled = true;
     public boolean pistonEnabled = true;
     public boolean chunkVoidEnabled = true;
-    public int yMin = -55;
-    public int yMax = 60;
+    public int yMin = -60;
+    public int yMax = 120;
     public int voidThreshold = 400;
     public float[] redstoneColor  = {1.0f, 0.1f, 0.1f, 0.9f};
     public float[] observerColor  = {1.0f, 0.9f, 0.0f, 0.9f};
